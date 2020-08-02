@@ -1,3 +1,5 @@
+#!/usr/bin/python
+
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 import sys
@@ -220,7 +222,7 @@ def vibrated(x):
 
 def heartbeat():
     current_time = time.time()
-    logging.debug("HB at {}".format(current_time))
+    logging.info("HB at {}".format(current_time))
     global vibrating
     delta_vibration = last_vibration_time - start_vibration_time
     if (vibrating and delta_vibration > begin_seconds
