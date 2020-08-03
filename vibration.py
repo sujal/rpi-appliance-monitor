@@ -3,6 +3,7 @@
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 import sys
+import signal
 import time
 import logging
 import threading
@@ -289,6 +290,14 @@ def heartbeat():
     vibrating = current_time - last_vibration_time < 2
     threading.Timer(1, heartbeat).start()
 
+def exit_gracefully():
+    if mqtt_homeassistant_autodiscovery:
+        mqtt_send_messages([{'topic': mqtt_homeassistant_availability_topic,
+                            'payload': 'offline'
+                            }])
+
+signal.signal(signal.SIGINT, exit_gracefully)
+signal.signal(signal.SIGTERM, exit_gracefully)
 
 logging.basicConfig(format='%(message)s', level=logging.INFO)
 
