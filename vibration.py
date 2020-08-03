@@ -51,17 +51,72 @@ def email(msg):
 
 def mqtt(msg):
     try:
-        mqtt_auth = None
-        if len(mqtt_username) > 0:
-            mqtt_auth = { 'username': mqtt_username, 'password': mqtt_password }
 
-        mqttpublish.single(mqtt_topic, msg, qos=0, retain=False, hostname=mqtt_hostname,
-        port=mqtt_port, client_id=mqtt_clientid, keepalive=60, will=None, auth=mqtt_auth,
-        tls=None)
+        global mqtt_homeassistant_autodiscovery
+
+        # this is the basic msg
+        msgs = [{'topic': mqtt_topic, 'payload': msg, 'qos': 0, 'retain': False}]
+
+        if mqtt_homeassistant_autodiscovery:
+            msgs.append({'topic': mqtt_homeassistant_state_topic, 'payload': ('ON' if appliance_active else 'OFF') , 'qos': 0, 'retain': True})
+            msgs.append({'topic': mqtt_homeassistant_availability_topic, 'payload': 'online', 'qos': 0, 'retain': True})
+
+        mqtt_send_messages(msgs)
     except (KeyboardInterrupt, SystemExit):
         raise
     except:
         pass
+
+def mqtt_register_with_homeassistant():
+    try:
+
+        global mqtt_homeassistant_state_topic
+        global mqtt_homeassistant_availability_topic
+
+        device_class = 'binary_sensor'
+        
+        mqtt_base_topic = mqtt_homeassistant_discovery_prefix + '/' + device_class + '/' + mqtt_clientid 
+        mqtt_discovery_topic = mqtt_base_topic + '/config'
+
+        mqtt_homeassistant_availability_topic = mqtt_base_topic + '/avty'
+        mqtt_homeassistant_state_topic = mqtt_base_topic + '/stat'
+
+        msgs = []
+
+        config_payload = {
+            '~': mqtt_base_topic,
+            'name': mqtt_clientid, 
+            'dev_cla': 'moving',
+            'stat_t': '~/stat',
+            'avty_t': '~/avty',
+            'pl_on': 'ON',
+            'pl_off': 'OFF'
+            }
+
+        msgs.append({'topic': mqtt_discovery_topic, 'payload': json.dumps(config_payload), 'qos': 0, 'retain': False})
+        msgs.append({'topic': mqtt_homeassistant_availability_topic, 'payload': 'online', 'qos': 0, 'retain': False})
+
+        mqtt_send_messages(msgs)
+
+    except (KeyboardInterrupt, SystemExit):
+        raise
+    except:
+        pass
+
+def mqtt_send_messages(msgs):
+    try:
+        mqtt_auth = None
+
+        if len(mqtt_username) > 0:
+            mqtt_auth = { 'username': mqtt_username, 'password': mqtt_password }        
+
+        mqttpublish.multiple(msgs, hostname=mqtt_hostname, port=mqtt_port, client_id=mqtt_clientid,
+        keepalive=60, will=None, auth=mqtt_auth, tls=None)
+    except (KeyboardInterrupt, SystemExit):
+        raise
+    except:
+        pass
+
 
 def pushbullet(cfg, msg):
     try:
@@ -252,7 +307,9 @@ verbose = config.getboolean('main', 'VERBOSE')
 sensor_pin = config.getint('main', 'SENSOR_PIN')
 begin_seconds = config.getint('main', 'SECONDS_TO_START')
 end_seconds = config.getint('main', 'SECONDS_TO_END')
-pushbullet_api_key = config.get('pushbullet', 'API_KEY')
+start_message = config.get('main', 'START_MESSAGE')
+end_message = config.get('main', 'END_MESSAGE')
+boot_message = config.get('main', 'BOOT_MESSAGE')
 
 pushover_user_key = config.get('pushover', 'user_api_key')
 pushover_app_key = config.get('pushover', 'app_api_key')
@@ -265,10 +322,15 @@ mqtt_topic = config.get('mqtt', 'mqtt_topic')
 mqtt_username = config.get('mqtt', 'mqtt_username')
 mqtt_password = config.get('mqtt', 'mqtt_password')
 mqtt_clientid = config.get('mqtt', 'mqtt_clientid')
+mqtt_homeassistant_autodiscovery = config.getboolean('mqtt', 'mqtt_homeassistant_autodiscovery')
+mqtt_homeassistant_state_topic = mqtt_topic + '/stat'
+mqtt_homeassistant_availability_topic = mqtt_topic + '/avty'
+mqtt_homeassistant_discovery_prefix = config.get('mqtt', 'mqtt_homeassistant_discovery_prefix')
+if len(mqtt_homeassistant_discovery_prefix) == 0:
+    mqtt_homeassistant_discovery_prefix = 'homeassistant'
 
+pushbullet_api_key = config.get('pushbullet', 'API_KEY')
 pushbullet_api_key2 = config.get('pushbullet', 'API_KEY2')
-start_message = config.get('main', 'START_MESSAGE')
-end_message = config.get('main', 'END_MESSAGE')
 twitter_api_key = config.get('twitter', 'api_key')
 twitter_api_secret = config.get('twitter', 'api_secret')
 twitter_access_token = config.get('twitter', 'access_token')
@@ -288,7 +350,11 @@ telegram_user_id = config.get('telegram', 'telegram_user_id')
 if verbose:
     logging.getLogger().setLevel(logging.DEBUG)
 
-send_alert(config.get('main', 'BOOT_MESSAGE'))
+send_alert(boot_message)
+
+if (mqtt_homeassistant_autodiscovery):
+    mqtt_register_with_homeassistant()
+
 
 GPIO.setwarnings(False)
 GPIO.setmode(GPIO.BCM)
