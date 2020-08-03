@@ -110,7 +110,7 @@ def mqtt_register_with_homeassistant():
         logging.debug('homeassistant autodiscovery payload: ' + json.dumps(config_payload))
 
         msgs.append({'topic': mqtt_discovery_topic, 'payload': json.dumps(config_payload), 'qos': 0, 'retain': True})
-        msgs.append({'topic': mqtt_homeassistant_availability_topic, 'payload': 'online', 'qos': 0, 'retain': False})
+        msgs.append({'topic': mqtt_homeassistant_availability_topic, 'payload': 'online', 'qos': 0, 'retain': True})
     
         mqtt_send_messages(msgs)
 
