@@ -3,7 +3,6 @@
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 import sys
-import signal
 import time
 import logging
 import threading
@@ -18,6 +17,9 @@ import paho.mqtt.publish as mqttpublish
 from ConfigParser import SafeConfigParser
 from tweepy import OAuthHandler as TweetHandler
 from slackclient import SlackClient
+
+import signal
+
 
 PUSHOVER_SOUNDS = None
 
@@ -75,8 +77,13 @@ def mqtt_register_with_homeassistant():
         global mqtt_homeassistant_availability_topic
 
         device_class = 'binary_sensor'
+
+        device_name = 'Appliance Monitor: ' + mqtt_clientid
+        device_unique_id = 'appliance-monitor-' + mqtt_clientid
+        entity_name = 'Appliance Monitor State: ' + mqtt_clientid
+        entity_unique_id = device_unique_id + '-state'
         
-        mqtt_base_topic = mqtt_homeassistant_discovery_prefix + '/' + device_class + '/' + mqtt_clientid 
+        mqtt_base_topic = mqtt_homeassistant_discovery_prefix + '/' + device_class + '/' + entity_unique_id 
         mqtt_discovery_topic = mqtt_base_topic + '/config'
 
         mqtt_homeassistant_availability_topic = mqtt_base_topic + '/avty'
@@ -86,17 +93,25 @@ def mqtt_register_with_homeassistant():
 
         config_payload = {
             '~': mqtt_base_topic,
-            'name': mqtt_clientid, 
+            'name': entity_name,
             'dev_cla': 'moving',
             'stat_t': '~/stat',
             'avty_t': '~/avty',
             'pl_on': 'ON',
-            'pl_off': 'OFF'
+            'pl_off': 'OFF',
+            'unique_id': entity_unique_id,
+            'dev': {
+                'identifiers': [device_unique_id],
+                'name': device_name
+                }
             }
 
-        msgs.append({'topic': mqtt_discovery_topic, 'payload': json.dumps(config_payload), 'qos': 0, 'retain': False})
-        msgs.append({'topic': mqtt_homeassistant_availability_topic, 'payload': 'online', 'qos': 0, 'retain': False})
+        logging.debug('homeassistant autodiscovery topic: ' + mqtt_discovery_topic)
+        logging.debug('homeassistant autodiscovery payload: ' + json.dumps(config_payload))
 
+        msgs.append({'topic': mqtt_discovery_topic, 'payload': json.dumps(config_payload), 'qos': 0, 'retain': True})
+        msgs.append({'topic': mqtt_homeassistant_availability_topic, 'payload': 'online', 'qos': 0, 'retain': False})
+    
         mqtt_send_messages(msgs)
 
     except (KeyboardInterrupt, SystemExit):
@@ -107,6 +122,8 @@ def mqtt_register_with_homeassistant():
 def mqtt_send_messages(msgs):
     try:
         mqtt_auth = None
+
+        logging.debug('about to send messages: ' + json.dumps(msgs))
 
         if len(mqtt_username) > 0:
             mqtt_auth = { 'username': mqtt_username, 'password': mqtt_password }        
@@ -254,15 +271,15 @@ def send_alert(message):
 
 
 def send_appliance_active_message():
-    send_alert(start_message)
     global appliance_active
     appliance_active = True
+    send_alert(start_message)
 
 
 def send_appliance_inactive_message():
-    send_alert(end_message)
     global appliance_active
     appliance_active = False
+    send_alert(end_message)
 
 
 def vibrated(x):
@@ -361,7 +378,8 @@ if verbose:
 
 send_alert(boot_message)
 
-if (mqtt_homeassistant_autodiscovery):
+if mqtt_homeassistant_autodiscovery:
+    logging.info('Starting HomeAssistant AutoDiscovery')
     mqtt_register_with_homeassistant()
 
 
